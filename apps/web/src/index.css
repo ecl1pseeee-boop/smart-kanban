@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body { font-family: var(--font-base); -webkit-font-smoothing: antialiased; }
+}
+
+/* Drag affordances — kept here because @dnd-kit needs class hooks. */
+.dnd-dragging { opacity: 0.5; outline: 2px solid var(--border-input-focus); }
+.dnd-over     { background: rgba(139, 92, 246, 0.06); }

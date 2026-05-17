@@ -1,0 +1,58 @@
+{
+  "name": "@smart-kanban/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.seed.json --noEmit",
+    "lint": "eslint src --max-warnings=0",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:reset": "prisma migrate reset --force",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:studio": "prisma studio"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "jose": "^5.9.6",
+    "@fastify/cors": "^9.0.1",
+    "@fastify/helmet": "^11.1.1",
+    "@fastify/rate-limit": "^9.1.0",
+    "@fastify/swagger": "^8.15.0",
+    "@fastify/swagger-ui": "^4.2.0",
+    "@prisma/client": "^6.1.0",
+    "@smart-kanban/shared": "workspace:*",
+    "argon2": "^0.41.1",
+    "fastify": "^4.28.1",
+    "fastify-plugin": "^4.5.1",
+    "fastify-type-provider-zod": "^2.0.0",
+    "ioredis": "^5.4.1",
+    "pino": "^9.5.0",
+    "pino-pretty": "^11.3.0",
+    "socket.io": "^4.8.1",
+    "@anthropic-ai/sdk": "^0.96.0",
+    "@socket.io/redis-adapter": "^8.3.0",
+    "bullmq": "^5.34.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.6",
+    "prisma": "^6.1.0",
+    "socket.io-client": "^4.8.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8",
+    "supertest": "^7.0.0",
+    "@types/supertest": "^6.0.2"
+  }
+}

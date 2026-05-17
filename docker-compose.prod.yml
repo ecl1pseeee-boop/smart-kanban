@@ -1,0 +1,26 @@
+# Production overrides — used with: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Removes host port exposure for internal services, sets NODE_ENV=production, mounts SSL certs.
+
+services:
+  postgres:
+    ports: []
+
+  redis:
+    ports: []
+
+  api:
+    ports: []
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: info
+
+  web:
+    ports: []
+
+  nginx:
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/certs:/etc/nginx/certs:ro

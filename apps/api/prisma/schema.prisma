@@ -1,0 +1,287 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  name           String
+  passwordHash   String    @map("password_hash")
+  role           UserRole  @default(MEMBER)
+  telegramId     String?   @unique @map("telegram_id")
+  telegramChatId String?   @map("telegram_chat_id")
+  avatarUrl      String?   @map("avatar_url")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  ownedBoards   Board[]        @relation("BoardOwner")
+  boardMembers  BoardMember[]
+  assignedTasks Task[]         @relation("TaskAssignee")
+  createdTasks  Task[]         @relation("TaskCreator")
+  comments      Comment[]
+  notifications Notification[]
+  refreshTokens RefreshToken[]
+  activityLogs  ActivityLog[]
+
+  @@map("users")
+}
+
+model Board {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  slug        String   @unique
+  isPublic    Boolean  @default(false) @map("is_public")
+  ownerId     String   @map("owner_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  owner        User             @relation("BoardOwner", fields: [ownerId], references: [id])
+  members      BoardMember[]
+  columns      Column[]
+  tasks        Task[]
+  rules        AutomationRule[]
+  activityLogs ActivityLog[]
+
+  @@map("boards")
+}
+
+model BoardMember {
+  id       String          @id @default(cuid())
+  boardId  String          @map("board_id")
+  userId   String          @map("user_id")
+  role     BoardMemberRole @default(MEMBER)
+  joinedAt DateTime        @default(now()) @map("joined_at")
+
+  board Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([boardId, userId])
+  @@map("board_members")
+}
+
+model Column {
+  id        String   @id @default(cuid())
+  boardId   String   @map("board_id")
+  name      String
+  color     String?
+  position  Int
+  wipLimit  Int?     @map("wip_limit")
+  isDefault Boolean  @default(false) @map("is_default")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  board Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  tasks Task[]
+
+  @@unique([boardId, position])
+  @@map("columns")
+}
+
+model Task {
+  id          String       @id @default(cuid())
+  boardId     String       @map("board_id")
+  columnId    String       @map("column_id")
+  title       String
+  description String?
+  priority    TaskPriority @default(MEDIUM)
+  status      TaskStatus   @default(TODO)
+  position    Int
+  tags        String[]     @default([])
+  dueDate     DateTime?    @map("due_date")
+  assigneeId  String?      @map("assignee_id")
+  creatorId   String       @map("creator_id")
+  lockedBy    String?      @map("locked_by")
+  lockedAt    DateTime?    @map("locked_at")
+  metadata    Json?
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  board          Board           @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  column         Column          @relation(fields: [columnId], references: [id])
+  assignee       User?           @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  creator        User            @relation("TaskCreator", fields: [creatorId], references: [id])
+  checklistItems ChecklistItem[]
+  comments       Comment[]
+  activityLogs   ActivityLog[]
+
+  @@index([boardId, columnId, position])
+  @@index([assigneeId])
+  @@index([dueDate])
+  @@map("tasks")
+}
+
+model ChecklistItem {
+  id        String   @id @default(cuid())
+  taskId    String   @map("task_id")
+  text      String
+  done      Boolean  @default(false)
+  position  Int
+  createdAt DateTime @default(now()) @map("created_at")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@map("checklist_items")
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  taskId    String   @map("task_id")
+  authorId  String   @map("author_id")
+  text      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id])
+
+  @@map("comments")
+}
+
+model AutomationRule {
+  id         String            @id @default(cuid())
+  boardId    String            @map("board_id")
+  name       String
+  isActive   Boolean           @default(true) @map("is_active")
+  trigger    AutomationTrigger
+  conditions Json
+  actions    Json
+  createdAt  DateTime          @default(now()) @map("created_at")
+  updatedAt  DateTime          @updatedAt @map("updated_at")
+
+  board Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  @@map("automation_rules")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String           @map("user_id")
+  type      NotificationType
+  title     String
+  body      String
+  payload   Json?
+  isRead    Boolean          @default(false) @map("is_read")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model ActivityLog {
+  id        String         @id @default(cuid())
+  boardId   String         @map("board_id")
+  taskId    String?        @map("task_id")
+  userId    String         @map("user_id")
+  action    ActivityAction
+  diff      Json?
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  board Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  task  Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@index([boardId, createdAt])
+  @@map("activity_logs")
+}
+
+model IncomingTask {
+  id           String             @id @default(cuid())
+  source       String
+  rawPayload   Json               @map("raw_payload")
+  status       IncomingTaskStatus @default(PENDING)
+  dedupHash    String             @unique @map("dedup_hash")
+  enrichedData Json?              @map("enriched_data")
+  error        String?
+  attempts     Int                @default(0)
+  createdAt    DateTime           @default(now()) @map("created_at")
+  processedAt  DateTime?          @map("processed_at")
+
+  @@index([status, createdAt])
+  @@map("incoming_tasks")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+enum UserRole {
+  ADMIN
+  MEMBER
+}
+
+enum BoardMemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum TaskPriority {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  REVIEW
+  DONE
+  ARCHIVED
+}
+
+enum AutomationTrigger {
+  TASK_CREATED
+  TASK_MOVED
+  TASK_UPDATED
+  TASK_ASSIGNED
+  DUE_DATE_APPROACHING
+  TAG_ADDED
+}
+
+enum NotificationType {
+  TASK_ASSIGNED
+  TASK_COMMENTED
+  TASK_DUE_SOON
+  TASK_OVERDUE
+  AUTOMATION_TRIGGERED
+  DAILY_SUMMARY
+  SYSTEM
+}
+
+enum ActivityAction {
+  TASK_CREATED
+  TASK_UPDATED
+  TASK_MOVED
+  TASK_DELETED
+  TASK_ASSIGNED
+  TASK_COMMENTED
+  COLUMN_CREATED
+  COLUMN_UPDATED
+  RULE_TRIGGERED
+}
+
+enum IncomingTaskStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+  DUPLICATE
+}
