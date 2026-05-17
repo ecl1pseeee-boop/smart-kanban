@@ -18,6 +18,11 @@ const envSchema = z.object({
 
   ANTHROPIC_API_KEY: z.string().optional(),
   AI_MODEL: z.string().default('claude-sonnet-4-6'),
+  OPENAI_API_KEY: z.string().optional(),
+  WHISPER_MODEL: z.string().default('whisper-1'),
+  OLLAMA_URL: z.string().url().default('http://127.0.0.1:11434'),
+  OLLAMA_MODEL: z.string().default('qwen2.5:1.5b'),
+  OLLAMA_TIMEOUT_MS: z.coerce.number().int().positive().default(180_000),
   TELEGRAM_BOT_TOKEN: z.string().optional(),
   BOT_SECRET: z.string().optional(),
   WEBHOOK_URL: z.string().url().optional(),

@@ -1,19 +1,30 @@
-import Anthropic from '@anthropic-ai/sdk'
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
-import { BoardMemberRole, TaskPriority, TaskStatus } from '@prisma/client'
+import { z } from 'zod'
+import { BoardMemberRole, TaskStatus } from '@prisma/client'
 import { prisma } from '../../config/prisma.js'
 import { logger } from '../../shared/logger.js'
 import { requireBoardRole } from '../../shared/access/board-access.js'
 import { NotFoundError } from '../../shared/errors/app-error.js'
-import { AI_MODEL, aiAvailable, anthropic, parseImagePayload } from './ai.client.js'
-import {
-  analyzeBugLlmSchema,
-  dailySummaryLlmSchema,
-  decomposeLlmSchema,
-} from './ai.schemas.js'
+import { chatJson } from './ai.client.js'
 import { heuristicEnrich } from '../queue/queue.worker.js'
 
 type Source = 'ai' | 'heuristic'
+
+// ── Local zod (v3) validators for LLM JSON output ──────────────────
+
+const decomposeOut = z.object({
+  steps: z.array(z.string().min(1).max(500)).min(1).max(8),
+})
+
+const dailySummaryOut = z.object({
+  summary: z.string().min(1).max(4000),
+})
+
+const analyzeBugOut = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().max(2000).default(''),
+  priority: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']),
+  tags: z.array(z.string().min(1).max(40)).max(10).default([]),
+})
 
 // ── 1. Decompose task ──────────────────────────────────────────────
 
@@ -25,39 +36,34 @@ export async function decompose(
   if (!task) throw new NotFoundError('Task')
   await requireBoardRole(userId, task.boardId, BoardMemberRole.MEMBER)
 
-  if (!aiAvailable || !anthropic) {
-    return { checklistItems: heuristicDecompose(task.title, task.description), source: 'heuristic' }
-  }
-
   try {
-    const r = await anthropic.messages.parse({
-      model: AI_MODEL,
-      max_tokens: 1024,
-      system:
-        'Ты — опытный технический менеджер. Декомпозируй задачу разработки на конкретные шаги. ' +
-        'Каждый шаг — атомарная подзадача (действие + результат). Максимум 8 шагов. Отвечай по-русски.',
-      messages: [
-        {
-          role: 'user',
-          content: `Задача: "${task.title}"\n${task.description ?? ''}`,
-        },
-      ],
-      output_config: { format: zodOutputFormat(decomposeLlmSchema) },
+    const raw = await chatJson({
+      systemPrompt:
+        'Ты — опытный технический менеджер. Декомпозируй задачу разработки на 3–8 атомарных шагов. ' +
+        'Каждый шаг — короткое предложение (действие + результат). Отвечай по-русски. ' +
+        'Верни СТРОГО валидный JSON в формате {"steps": ["шаг 1", "шаг 2", ...]}. ' +
+        'Никакого текста вне JSON.',
+      userPrompt: `Задача: "${task.title}"\n${task.description ?? ''}`,
+      maxTokens: 800,
     })
-
-    if (r.stop_reason === 'refusal' || !r.parsed_output) {
-      logger.warn({ taskId: task.id, stop: r.stop_reason }, 'decompose: AI refused / no parsed_output')
+    const parsed = decomposeOut.safeParse(raw)
+    if (!parsed.success) {
+      logger.warn({ issues: parsed.error.issues }, 'decompose: invalid JSON shape, fallback')
       return {
         checklistItems: heuristicDecompose(task.title, task.description),
         source: 'heuristic',
       }
     }
-    return { checklistItems: r.parsed_output.steps, source: 'ai' }
+    return { checklistItems: parsed.data.steps, source: 'ai' }
   } catch (err) {
-    return handleAiError(err, () => ({
+    logger.warn(
+      { err: err instanceof Error ? err.message : err },
+      'decompose: LLM call failed, fallback to heuristic',
+    )
+    return {
       checklistItems: heuristicDecompose(task.title, task.description),
-      source: 'heuristic' as const,
-    }))
+      source: 'heuristic',
+    }
   }
 }
 
@@ -107,13 +113,6 @@ export async function dailySummary(
     }),
   ])
 
-  if (!aiAvailable || !anthropic) {
-    return {
-      summary: heuristicDailySummary(board.name, counts, upcoming.length, stuck.length),
-      source: 'heuristic',
-    }
-  }
-
   const activityBrief = activity
     .slice(0, 20)
     .map((a) => `${a.action} by ${a.user.name}`)
@@ -124,45 +123,43 @@ export async function dailySummary(
   const stuckBrief = stuck.map((t) => `• ${t.title}`).join('\n')
 
   try {
-    const r = await anthropic.messages.parse({
-      model: AI_MODEL,
-      max_tokens: 2000,
-      system:
+    const raw = await chatJson({
+      systemPrompt:
         'Ты — деловой ассистент, готовящий ежедневную выжимку по проекту. ' +
-        'Структура (на русском): "✅ Завершено:\\n⚡ В процессе:\\n🚨 Риски:\\n📅 Скоро дедлайн:". ' +
-        'Используй только эмодзи, перечисленные в структуре. Не выдумывай факты — если в данных пусто, скажи "Нет данных".',
-      messages: [
-        {
-          role: 'user',
-          content:
-            `Доска: ${board.name}\n\n` +
-            `Активность за сутки:\n${activityBrief || '(пусто)'}\n\n` +
-            `Дедлайны в ближайшие 48 часов:\n${upcomingBrief || '(пусто)'}\n\n` +
-            `Задачи, застрявшие >3 дней:\n${stuckBrief || '(пусто)'}\n\n` +
-            `Распределение по статусам: ${counts
-              .map((c) => `${c.status}=${c._count._all}`)
-              .join(', ')}`,
-        },
-      ],
-      output_config: { format: zodOutputFormat(dailySummaryLlmSchema) },
+        'Сделай краткую сводку по-русски в формате: ' +
+        '"✅ Завершено: ...\\n⚡ В процессе: ...\\n🚨 Риски: ...\\n📅 Скоро дедлайн: ...". ' +
+        'Используй ТОЛЬКО эти четыре эмодзи. Не выдумывай факты — если в данных пусто, пиши "Нет данных". ' +
+        'Верни СТРОГО JSON {"summary": "...строки сводки..."}. Без текста вне JSON.',
+      userPrompt:
+        `Доска: ${board.name}\n\n` +
+        `Активность за сутки:\n${activityBrief || '(пусто)'}\n\n` +
+        `Дедлайны в ближайшие 48 часов:\n${upcomingBrief || '(пусто)'}\n\n` +
+        `Задачи, застрявшие >3 дней:\n${stuckBrief || '(пусто)'}\n\n` +
+        `Распределение по статусам: ${counts.map((c) => `${c.status}=${c._count._all}`).join(', ')}`,
+      maxTokens: 1024,
     })
-
-    if (r.stop_reason === 'refusal' || !r.parsed_output) {
+    const parsed = dailySummaryOut.safeParse(raw)
+    if (!parsed.success) {
       return {
         summary: heuristicDailySummary(board.name, counts, upcoming.length, stuck.length),
         source: 'heuristic',
       }
     }
-    return { summary: r.parsed_output.summary, source: 'ai' }
+    return { summary: parsed.data.summary, source: 'ai' }
   } catch (err) {
-    return handleAiError(err, () => ({
+    logger.warn(
+      { err: err instanceof Error ? err.message : err },
+      'dailySummary: LLM call failed, fallback to heuristic',
+    )
+    return {
       summary: heuristicDailySummary(board.name, counts, upcoming.length, stuck.length),
-      source: 'heuristic' as const,
-    }))
+      source: 'heuristic',
+    }
   }
 }
 
 // ── 3. Analyze bug ─────────────────────────────────────────────────
+// Note: Ollama with qwen2.5:1.5b is text-only. Image input is ignored here.
 
 export async function analyzeBug(input: {
   description?: string | undefined
@@ -174,74 +171,40 @@ export async function analyzeBug(input: {
   tags: string[]
   source: Source
 }> {
-  const image = input.imageBase64 ? parseImagePayload(input.imageBase64) : null
-  if (input.imageBase64 && !image) {
-    // Invalid image format — fall through to text-only with the description we have
-    logger.warn('analyze-bug: imageBase64 unparseable, ignoring image')
+  if (input.imageBase64 && !input.description) {
+    // Without vision, we can't analyze image-only bugs — heuristic stub.
+    return analyzeBugHeuristic('Скриншот бага (изображение не разобрано локальной моделью)')
   }
-
-  if (!aiAvailable || !anthropic) {
-    return analyzeBugHeuristic(input.description)
-  }
-
-  // Build user content: image (if any) + text
-  const userContent: Anthropic.ContentBlockParam[] = []
-  if (image) {
-    userContent.push({
-      type: 'image',
-      source: { type: 'base64', media_type: image.mediaType, data: image.data },
-    })
-  }
-  const textPart = input.description
-    ? `Описание проблемы: ${input.description}`
-    : 'На скриншоте — баг, который нужно описать. Сформулируй карточку задачи.'
-  userContent.push({ type: 'text', text: textPart })
 
   try {
-    const r = await anthropic.messages.parse({
-      model: AI_MODEL,
-      max_tokens: 1024,
-      system:
-        'Ты — технический менеджер. По описанию проблемы (текст и/или скриншот) сформулируй карточку бага: ' +
-        'короткий заголовок (≤80 символов), описание (что происходит, ожидаемое поведение, шаги воспроизведения если можно вывести), ' +
-        'priority (CRITICAL для проблем продакшена, HIGH для блокирующих рабочий поток, MEDIUM по умолчанию, LOW для косметики), ' +
-        'и набор тегов (на русском, по теме). Отвечай по-русски.',
-      messages: [{ role: 'user', content: userContent }],
-      output_config: { format: zodOutputFormat(analyzeBugLlmSchema) },
+    const raw = await chatJson({
+      systemPrompt:
+        'Ты — технический менеджер. По описанию проблемы сформулируй карточку бага: ' +
+        'title (≤80 символов, по-русски), description (что происходит, ожидаемое поведение, шаги воспроизведения если выводимы), ' +
+        'priority (CRITICAL — прод-инцидент, HIGH — блокирует работу, MEDIUM — обычный баг, LOW — косметика), ' +
+        'tags — массив из 1–5 ключевых тегов на русском. ' +
+        'Верни СТРОГО JSON {"title": ..., "description": ..., "priority": ..., "tags": [...]}. Без текста вне JSON.',
+      userPrompt: `Описание проблемы:\n${input.description ?? '(нет)'}`,
+      maxTokens: 1024,
     })
-
-    if (r.stop_reason === 'refusal' || !r.parsed_output) {
+    const parsed = analyzeBugOut.safeParse(raw)
+    if (!parsed.success) {
       return analyzeBugHeuristic(input.description)
     }
-    const p = r.parsed_output
-    return {
-      title: p.title,
-      description: p.description,
-      priority: p.priority,
-      tags: p.tags,
-      source: 'ai',
-    }
+    return { ...parsed.data, source: 'ai' }
   } catch (err) {
-    return handleAiError(err, () => analyzeBugHeuristic(input.description))
+    logger.warn(
+      { err: err instanceof Error ? err.message : err },
+      'analyzeBug: LLM call failed, fallback to heuristic',
+    )
+    return analyzeBugHeuristic(input.description)
   }
-}
-
-// ── Error funnel ──────────────────────────────────────────────────
-
-function handleAiError<T>(err: unknown, fallback: () => T): T {
-  if (err instanceof Anthropic.APIError) {
-    logger.warn({ status: err.status, message: err.message }, 'AI call failed, falling back')
-    return fallback()
-  }
-  // Unknown shape — re-throw, the global error handler will return 500.
-  throw err
 }
 
 // ── Heuristic fallbacks ───────────────────────────────────────────
 
 function heuristicDecompose(title: string, description?: string | null): string[] {
   const t = `${title} ${description ?? ''}`.toLowerCase()
-  // Tailor by keyword
   if (/(api|endpoint|роут)/u.test(t)) {
     return [
       'Спроектировать API: схема входа и выхода',

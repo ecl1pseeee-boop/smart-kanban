@@ -1,6 +1,7 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
+import multipart from '@fastify/multipart'
 import rateLimit from '@fastify/rate-limit'
 import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
@@ -78,6 +79,12 @@ export async function buildApp() {
     origin: corsOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'PUT', 'OPTIONS'],
+  })
+
+  // ── Multipart (audio uploads for /api/ai/process-voice) ──────────
+  // 26 MB cap matches Whisper's 25 MB hard limit + slack for FormData overhead.
+  await app.register(multipart, {
+    limits: { fileSize: 26 * 1024 * 1024, files: 1 },
   })
 
   // ── Rate limiting (Redis store) ──────────────────────────────────

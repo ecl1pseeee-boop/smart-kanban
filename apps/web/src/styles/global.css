@@ -41,6 +41,155 @@ html, body, #root {
 .pb-fade-in     { animation: pb-fade-in var(--transition-normal) both; }
 .pb-slide-in    { animation: pb-slide-in-right 0.25s ease both; }
 
+/* ── Typography helpers ────────────────────────────────────────── */
+.pb-font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+/* ── Typewriter caret (для landing) ─────────────────────────────── */
+@keyframes pb-caret-blink {
+  0%, 49%   { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.pb-caret {
+  display: inline-block;
+  width: 0.06em;
+  margin-left: 0.04em;
+  background: var(--accent-from);
+  align-self: stretch;
+  animation: pb-caret-blink 0.8s steps(1) infinite;
+  border-radius: 1px;
+  vertical-align: -0.08em;
+}
+
+/* ── Slide-up + fade (для строк-монолитов) ──────────────────────── */
+@keyframes pb-slide-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.pb-slide-up {
+  animation: pb-slide-up 0.45s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+/* ── Монолит-строка доски ───────────────────────────────────────── */
+.pb-monolith {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 22px 28px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  color: inherit;
+  transition: background var(--transition-normal), border-color var(--transition-normal), transform var(--transition-fast);
+  overflow: hidden;
+  cursor: pointer;
+}
+.pb-monolith::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 12%;
+  bottom: 12%;
+  width: 2px;
+  background: var(--gradient-accent);
+  opacity: 0;
+  transition: opacity var(--transition-normal);
+  box-shadow: 0 0 18px rgba(139, 92, 246, 0.55);
+  border-radius: 2px;
+}
+.pb-monolith:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.10);
+}
+.pb-monolith:hover::before { opacity: 1; }
+.pb-monolith:active { transform: translateX(1px); }
+
+/* ── Pulsing red record button ──────────────────────────────────── */
+@keyframes pb-rec-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55), 0 0 28px rgba(239, 68, 68, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 18px rgba(239, 68, 68, 0), 0 0 44px rgba(239, 68, 68, 0.7);
+  }
+}
+.pb-recording {
+  animation: pb-rec-pulse 1.4s ease-in-out infinite;
+}
+
+/* ── AI gradient glow (большая ИИ-кнопка) ───────────────────────── */
+.pb-ai-cta {
+  background: linear-gradient(135deg, rgba(139,92,246,0.95) 0%, rgba(14,165,233,0.95) 100%);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.18);
+  box-shadow:
+    0 0 0 1px rgba(139,92,246,0.35),
+    0 12px 40px rgba(139,92,246,0.30),
+    0 4px 20px rgba(14,165,233,0.25);
+  transition: transform var(--transition-fast), box-shadow var(--transition-normal), filter var(--transition-fast);
+}
+.pb-ai-cta:hover {
+  transform: translateY(-1px) scale(1.015);
+  box-shadow:
+    0 0 0 1px rgba(139,92,246,0.55),
+    0 16px 52px rgba(139,92,246,0.45),
+    0 6px 28px rgba(14,165,233,0.4);
+}
+
+/* ── Neon-loader bar (ИИ анализирует созвон) ────────────────────── */
+@keyframes pb-neon-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+.pb-neon-bar {
+  position: relative;
+  height: 4px;
+  width: 100%;
+  background: rgba(255,255,255,0.05);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.pb-neon-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 25%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, #8b5cf6 30%, #06b6d4 70%, transparent);
+  box-shadow: 0 0 18px rgba(139,92,246,0.7), 0 0 36px rgba(6,182,212,0.4);
+  animation: pb-neon-slide 1.6s ease-in-out infinite;
+}
+
+/* ── Toast ──────────────────────────────────────────────────────── */
+@keyframes pb-toast-in {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+.pb-toast {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 14px 22px;
+  background: rgba(20, 22, 28, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  border-radius: var(--radius-lg);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: 0 12px 40px rgba(139, 92, 246, 0.25);
+  z-index: 1000;
+  animation: pb-toast-in 0.3s ease both;
+  max-width: 540px;
+}
+
 /* ── Button variants ───────────────────────────────────────────── */
 .pb-btn { outline: none; }
 .pb-btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -194,3 +343,45 @@ html, body, #root {
 
 /* Native select coloring inside dark theme */
 .pb-input option { background: #15161a; color: var(--text-primary); }
+
+/* ── Адаптив landing ────────────────────────────────────────────── */
+@media (max-width: 880px) {
+  .pb-login-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .pb-login-grid > div {
+    padding: 40px 28px !important;
+  }
+}
+
+/* ── Затемнение фона на время записи ────────────────────────────── */
+@keyframes pb-dim-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.pb-voice-dim-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 9, 12, 0.78);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: 90;
+  pointer-events: auto;
+  animation: pb-dim-in 0.35s ease both;
+}
+[data-voice-host='1'] {
+  position: relative;
+  z-index: 100;
+}
+
+/* ── Адаптив монолит-строк ──────────────────────────────────────── */
+@media (max-width: 720px) {
+  .pb-monolith {
+    flex-wrap: wrap;
+    gap: 12px 18px;
+    padding: 18px 20px;
+  }
+  .pb-monolith > :first-child {
+    flex-basis: 100%;
+  }
+}
