@@ -205,6 +205,17 @@ export const api = {
   // Columns
   createColumn: (boardId: string, input: { name: string; color?: string; wipLimit?: number }) =>
     request<Column>(`/api/boards/${boardId}/columns`, { method: 'POST', body: input }),
+  patchColumn: (
+    boardId: string,
+    columnId: string,
+    body: { name?: string; color?: string | null; wipLimit?: number | null; isDefault?: boolean },
+  ) =>
+    request<Column>(`/api/boards/${boardId}/columns/${columnId}`, {
+      method: 'PATCH',
+      body,
+    }),
+  deleteColumn: (boardId: string, columnId: string) =>
+    request<void>(`/api/boards/${boardId}/columns/${columnId}`, { method: 'DELETE' }),
 
   // ── Automation rules ──────────────────────────────────────────
   listRules: (boardId: string) =>

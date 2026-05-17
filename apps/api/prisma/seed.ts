@@ -56,12 +56,12 @@ async function main() {
 
   // ── Board (idempotent via upsert by slug) ─────────────────────────
   const board = await prisma.board.upsert({
-    where: { slug: 'smart-kanban-demo' },
-    update: { name: 'Smart Kanban Demo' },
+    where: { slug: 'smart-kanban' },
+    update: { name: 'Smart Kanban' },
     create: {
-      name: 'Smart Kanban Demo',
-      slug: 'smart-kanban-demo',
-      description: 'Demo-доска для презентации Smart Kanban',
+      name: 'Smart Kanban',
+      slug: 'smart-kanban',
+      description: 'Главная доска проекта',
       isPublic: true,
       ownerId: admin.id,
     },

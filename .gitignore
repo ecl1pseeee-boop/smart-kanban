@@ -39,3 +39,7 @@ apps/api/prisma/migrations/dev.db*
 # Docker volumes (just in case)
 postgres_data/
 redis_data/
+
+# Local-only docs (kept on disk but never committed)
+SPEC.md
+promptboard-landing.html
