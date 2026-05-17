@@ -83,6 +83,7 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       API_URL: http://api:3001
       BOT_SECRET: ${BOT_SECRET}
+      WEB_URL: ${WEB_URL:-http://localhost:3000}
     depends_on:
       - api
     restart: unless-stopped
