@@ -1,5 +1,6 @@
 # Smart Kanban
-
+Ссылка на сервер: unithack.play2go.cloud
+Или по IP: 2.26.103.150
 Real-time канбан-система уровня Jira/Trello с event-driven архитектурой, AI-автоматизацией (Anthropic Claude) и Telegram-ботом. Проект разрабатывается на хакатон **ЮНИТХАК**.
 
 Полная спецификация — в [`SPEC.md`](./SPEC.md).
